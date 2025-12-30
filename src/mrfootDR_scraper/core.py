@@ -19,7 +19,6 @@ async def fetch_clinic_data(url: str, browser: Chrome) -> dict[str, str | None]:
     await asyncio.sleep(0.3)
 
     data = {}
-    # Services
 
     meta = await tab.find(
         tag_name="div",
