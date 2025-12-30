@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 
 from pydoll.browser import Chrome
 
-BASE_URL = "https://web.archive.org/web/20250618212909/https://www.myfootdr.com.au"
+BASE_URL = "https://www.myfootdr.com.au"
 
 async def fetch_clinic_data(url: str, browser: Chrome) -> dict[str, str | None]:
     tab = await browser.new_tab()
