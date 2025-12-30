@@ -1,0 +1,22 @@
+[project]
+name = "mrfootdr-scraper"
+version = "0.1.0"
+description = "Scraper for submission to Mindrift"
+authors = [
+    {name = "Mehwish",email = "39596277+mehwishh247@users.noreply.github.com"}
+]
+readme = "README.md"
+requires-python = ">=3.12,<4.0"
+dependencies = [
+    "pydoll-python (>=2.15.0,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+packages = [
+    { include = "mrfootDR_scraper", from = "src" }
+]
