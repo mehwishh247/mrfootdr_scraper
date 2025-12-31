@@ -3,68 +3,77 @@ import pprint
 import asyncio
 import re
 import csv
-from typing import Any
+import json
+from urllib.parse import unquote
 
 from pydoll.browser import Chrome
 from pydoll.browser.options import ChromiumOptions
-from datetime import datetime, timezone
+from pydoll.constants import By
 
 from pydoll.browser import Chrome
 
-BASE_URL = "https://www.myfootdr.com.au"
+BASE_URL = "https://web.archive.org/web/20250707233946/https://www.myfootdr.com.au"
 
 async def fetch_clinic_data(url: str, browser: Chrome) -> dict[str, str | None]:
     tab = await browser.new_tab()
     await tab.go_to(url)
     await asyncio.sleep(0.3)
-
     data = {}
 
-    meta = await tab.find(
-        tag_name="div",
-        class_name="clinic-metabox",
-        raise_exc=False
-    )
+    json_lds = await tab.query("//script[@type='application/ld+json']", find_all=True)
 
-    name = await meta.find(
-        tag_name="img",
-        raise_exc=False
-    )
-    data["Name of Clinic"] = name.get_attribute("title") if name else None
+    for json_ld in json_lds:
+        tag = json_ld.tag_name
+        if tag != "script":
+            continue
+            
+        json_text = await json_ld.inner_html
 
-    phone = await meta.find(
-        tag_name="a",
-        raise_exc=False
-    )
+        if f"LocalBusiness" not in json_text:
+            continue
 
-    data["Phone"] = (await phone.text).lstrip("Call ") if phone else None
+        clinic = json.loads(json_text.lstrip("<script type=\"application/ld+json\">\n").rstrip("\n</script>"))
 
-    address = await meta.find(
-        tag_name="div",
-        class_name="address",
-        raise_exc=False
-    )
-    data["Address"] = (await address.text).strip() if address else None
+        data["Name"] = clinic.get("name", "")
+        data["Phone"] = clinic.get("telephone", "")
+        data["Email"] = clinic.get("email", "")
 
-    raw_text = meta.inner_html()
-    email = re.search(r'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}', raw_text)
-    data["Email"] = match.group(0) if email else None
+        address = ""
+        addr = clinic.get("address")
+        if isinstance(addr, dict):
+            address = ", ".join(filter(None, [
+                addr.get("streetAddress"),
+                addr.get("addressLocality"),
+                addr.get("addressRegion"),
+                addr.get("postalCode"),
+                addr.get("addressCountry"),
+            ]))
 
-    service_container = await tab.find(
-        tag_name="div",
-        class_name="clinic-2020-services"
-    )
+        data["Address"] = address
 
-    services_list = await service_container.find(
-        tag_name="img",
-        find_all=True
-    )
-    services = []
+        service_list = []
+        offers = clinic.get("makesOffer")
 
-    for service in services_list:
-        services.append(await service.get_attribute("alt"))
+        if isinstance(offers, list):
+            for offer in offers:
+                url = (offer or {}).get("url", "")
+                if not url:
+                    continue
 
-    data["Services"] = str(services)[1:-1]
+                # extract last path segment
+                split_name = url.split("/")[-2]
+                slug = unquote(split_name)
+
+                if slug.lower() in {"resources"}:
+                    continue
+
+                title = slug.replace("-", " ").title()
+                title = title.replace("Ndis", "NDIS").replace("Smos", "SMOs")
+                service_list.append(title)
+
+        data["Services"] = str(service_list)[1:-1].replace("'","") if service_list else ""
+
+    await tab.close()
 
     return data
 
@@ -86,9 +95,12 @@ async def get_region_data(url: str, browser: Chrome) -> list[dict[str, str]]:
     for clinic in clinic_urls:
         link = clinic.get_attribute("href")
         clinic_details = await fetch_clinic_data(url=link, browser=browser)
+        if not clinic_details:
+            continue
+
         data.append(clinic_details)
 
-        print(clinic_details)
+    await tab.close()
 
     return data
 
@@ -100,6 +112,7 @@ async def run_scraper():
         chromium_options = ChromiumOptions()
         chromium_options.add_argument("--lang=en-US")
         chromium_options.add_argument("--accept-lang=en-US,en;q=0.9")
+        chromium_options.headless = True
         chromium_options.binary_location = "/snap/bin/chromium"
 
         data = []
@@ -131,6 +144,8 @@ async def run_scraper():
                 region_data = await get_region_data(url, browser=browser)
                 data.extend(region_data)
 
+            await tab.close()
+
         fieldnames = ["Name of Clinic", "Address", "Email", "Phone", "Services"]
         with open("mr_foot_dr.csv", "w+") as csv_file:
             writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
@@ -142,4 +157,4 @@ async def run_scraper():
         logging.exception(e)
         raise
 
-# asyncio.run(run_scraper())
+asyncio.run(run_scraper())
