@@ -147,11 +147,8 @@ async def run_scraper():
             await tab.close()
 
         fieldnames = ["Name of Clinic", "Address", "Email", "Phone", "Services"]
-        with open("mr_foot_dr.csv", "w+") as csv_file:
-            writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
-
-            writer.writeheader()
-            writer.writerows(data)
+        with open("mrfoot_dr.json", "w+") as json_file:
+            json.dump(data, json_file, indent=1)
 
     except Exception as e:
         logging.exception(e)
